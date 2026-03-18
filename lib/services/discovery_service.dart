@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/device.dart';
 import 'devices_provider.dart';
-import 'dart:typed_data';
 
 /// Nexus devices announce themselves on UDP port 5353 (mDNS-like)
 /// and also respond to a JSON HTTP ping on port 5050.
@@ -13,7 +12,7 @@ import 'dart:typed_data';
 ///   2. Scans the /24 subnet pinging each host's port 5050
 class DiscoveryService {
   static const int _nexusPort = 5050;
-  static const Duration _timeout = Duration(seconds: 1);
+  static const Duration _timeout = Duration(seconds: 1));
 
   final DevicesNotifier _notifier;
   Timer? _broadcastTimer;
@@ -51,7 +50,7 @@ class DiscoveryService {
       await socket.flush();
 
       final response = await socket.first
-          .timeout(const Duration(milliseconds: 500), onTimeout: () => Uint8List(0));
+          .timeout(const Duration(milliseconds: 500), onTimeout: () => []);
       socket.destroy();
 
       if (response.isEmpty) return;
@@ -60,7 +59,6 @@ class DiscoveryService {
     } catch (_) {
       // Host not running Nexus daemon — ignore silently
     }
-
   }
 
   void _handleDiscovered(String ip, Map<String, dynamic> data) {
@@ -130,4 +128,3 @@ final discoveryServiceProvider = Provider<DiscoveryService>((ref) {
   ref.onDispose(service.stop);
   return service;
 });
-

@@ -164,8 +164,8 @@ class TransferNotifier extends StateNotifier<List<TransferItem>> {
 }
 
 final transferProvider =
-StateNotifierProvider<TransferNotifier, List<TransferItem>>(
-      (ref) {
+    StateNotifierProvider<TransferNotifier, List<TransferItem>>(
+  (ref) {
     final n = TransferNotifier();
     n.startServer();
     return n;

@@ -3,142 +3,113 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../theme/app_theme.dart';
 import '../../models/device.dart';
-import '../../services/devices_provider.dart';
-import '../../services/discovery_service.dart';
+import '../../services/auth_service.dart';
 import '../../widgets/nx_card.dart';
 
-class DevicesScreen extends ConsumerStatefulWidget {
+class DevicesScreen extends ConsumerWidget {
   const DevicesScreen({super.key});
-  @override
-  ConsumerState<DevicesScreen> createState() => _DevicesScreenState();
-}
-
-class _DevicesScreenState extends ConsumerState<DevicesScreen> {
-  bool _scanning = false;
-
-  Future<void> _scan() async {
-    setState(() => _scanning = true);
-    await ref.read(discoveryServiceProvider).scanNow();
-    if (mounted) setState(() => _scanning = false);
-  }
 
   @override
-  Widget build(BuildContext context) {
-    final devices = ref.watch(devicesProvider);
-    final online  = devices.where((d) => d.status == DeviceStatus.online).toList();
-    final offline = devices.where((d) => d.status != DeviceStatus.online).toList();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final devicesAsync = ref.watch(devicesStreamProvider);
     final t  = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Devices'),
-        actions: [
-          _scanning
-            ? const Padding(padding: EdgeInsets.all(14),
-                child: SizedBox(width: 20, height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2)))
-            : IconButton(
-                icon: const Icon(Icons.radar_rounded),
-                tooltip: 'Scan LAN',
-                onPressed: _scan),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: ListView(padding: const EdgeInsets.all(16), children: [
+      appBar: AppBar(title: const Text('Devices')),
+      body: devicesAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Error: $e', style: t.bodyMedium)),
+        data: (devices) {
+          final online  = devices.where((d) => d.status == DeviceStatus.online).toList();
+          final offline = devices.where((d) => d.status != DeviceStatus.online).toList();
 
-        // Network status card
-        NxCard(
-          accent: AppTheme.success,
-          padding: const EdgeInsets.all(16),
-          child: Row(children: [
-            const NxIconBox(icon: Icons.wifi_rounded, color: AppTheme.success, size: 44),
-            const SizedBox(width: 14),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Local network', style: t.titleMedium),
-              Text('LAN — all features work without internet', style: t.bodySmall),
-            ])),
-            Container(width: 9, height: 9,
-                decoration: const BoxDecoration(color: AppTheme.success, shape: BoxShape.circle)),
-          ]),
-        ),
-        const SizedBox(height: 20),
+          return ListView(padding: const EdgeInsets.all(16), children: [
+            // Account banner
+            NxCard(
+              accent: AppTheme.primary,
+              selected: true,
+              padding: const EdgeInsets.all(16),
+              child: Row(children: [
+                Container(
+                  width: 44, height: 44,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary, borderRadius: BorderRadius.circular(22)),
+                  child: const Icon(Icons.hub_rounded, color: Colors.white, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Your Nexus account', style: t.titleMedium),
+                  Text('${devices.length} device${devices.length == 1 ? '' : 's'} registered · '
+                      '${online.length} online now', style: t.bodySmall),
+                ])),
+              ]),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.accent.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.accent.withOpacity(0.25)),
+              ),
+              child: Row(children: [
+                const Icon(Icons.info_outline_rounded, color: AppTheme.accent, size: 16),
+                const SizedBox(width: 10),
+                Expanded(child: Text(
+                  'Install Nexus on any device and sign in with the same account — it appears here automatically.',
+                  style: t.bodySmall?.copyWith(color: AppTheme.accent),
+                )),
+              ]),
+            ),
+            const SizedBox(height: 20),
 
-        if (online.isNotEmpty) ...[
-          NxSectionHeader('Online (${online.length})', color: AppTheme.success),
-          ...online.asMap().entries.map((e) =>
-              Padding(padding: const EdgeInsets.only(bottom: 10),
-                  child: _DeviceCard(device: e.value, index: e.key))),
-          const SizedBox(height: 8),
-        ],
+            if (online.isNotEmpty) ...[
+              NxSectionHeader('Online (${online.length})', color: AppTheme.success),
+              ...online.asMap().entries.map((e) =>
+                  Padding(padding: const EdgeInsets.only(bottom: 10),
+                      child: _DeviceCard(device: e.value, index: e.key))),
+              const SizedBox(height: 8),
+            ],
 
-        if (offline.isNotEmpty) ...[
-          NxSectionHeader('Offline (${offline.length})', color: cs.onSurface.withOpacity(0.4)),
-          ...offline.asMap().entries.map((e) =>
-              Padding(padding: const EdgeInsets.only(bottom: 10),
-                  child: _DeviceCard(device: e.value, index: e.key, dimmed: true))),
-          const SizedBox(height: 8),
-        ],
+            if (offline.isNotEmpty) ...[
+              NxSectionHeader('Offline (${offline.length})',
+                  color: cs.onSurface.withOpacity(0.4)),
+              ...offline.asMap().entries.map((e) =>
+                  Padding(padding: const EdgeInsets.only(bottom: 10),
+                      child: _DeviceCard(device: e.value, index: e.key, dimmed: true))),
+            ],
 
-        OutlinedButton.icon(
-          onPressed: () => _showManualAdd(context),
-          icon: const Icon(Icons.add_rounded),
-          label: const Text('Add device manually'),
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size.fromHeight(48),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
-        const SizedBox(height: 24),
-      ]),
-    );
-  }
-
-  void _showManualAdd(BuildContext context) {
-    final ipCtrl   = TextEditingController();
-    final nameCtrl = TextEditingController();
-    showModalBottomSheet(context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (_) => Padding(
-        padding: EdgeInsets.fromLTRB(24, 20, 24, MediaQuery.of(context).viewInsets.bottom + 24),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Add device manually', style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: 16),
-          TextField(controller: ipCtrl,
-              decoration: const InputDecoration(labelText: 'IP address', hintText: '192.168.1.xxx')),
-          const SizedBox(height: 12),
-          TextField(controller: nameCtrl,
-              decoration: const InputDecoration(labelText: 'Name (optional)')),
-          const SizedBox(height: 20),
-          FilledButton(
-            onPressed: () {
-              if (ipCtrl.text.isNotEmpty) {
-                ref.read(devicesProvider.notifier).addOrUpdate(Device(
-                  id: ipCtrl.text, name: nameCtrl.text.isEmpty ? ipCtrl.text : nameCtrl.text,
-                  type: DeviceType.unknown, ip: ipCtrl.text, status: DeviceStatus.connecting,
-                ));
-              }
-              Navigator.pop(context);
-            },
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-            child: const Text('Connect'),
-          ),
-        ]),
+            if (devices.isEmpty)
+              Center(child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 48),
+                child: Column(children: [
+                  Icon(Icons.devices_rounded, size: 48,
+                      color: cs.onSurface.withOpacity(0.15)),
+                  const SizedBox(height: 16),
+                  Text('No devices yet', style: t.titleMedium?.copyWith(
+                      color: cs.onSurface.withOpacity(0.4))),
+                  const SizedBox(height: 8),
+                  Text('Install Nexus on your other devices\nand sign in with this account',
+                      style: t.bodySmall, textAlign: TextAlign.center),
+                ]),
+              )),
+            const SizedBox(height: 24),
+          ]);
+        },
       ),
     );
   }
 }
 
-class _DeviceCard extends ConsumerWidget {
+class _DeviceCard extends StatelessWidget {
   final Device device;
   final int index;
   final bool dimmed;
   const _DeviceCard({required this.device, required this.index, this.dimmed = false});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final isOnline = device.status == DeviceStatus.online;
     final t  = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
@@ -161,7 +132,8 @@ class _DeviceCard extends ConsumerWidget {
             Text(device.name,
                 style: t.titleMedium?.copyWith(
                     color: dimmed ? cs.onSurface.withOpacity(0.4) : null)),
-            Text('${device.typeLabel} · ${device.ip}', style: t.bodySmall),
+            Text('${device.typeLabel}${device.ip.isNotEmpty ? ' · ${device.ip}' : ''}',
+                style: t.bodySmall),
           ])),
           _StatusBadge(device.status),
         ]),
@@ -197,20 +169,20 @@ class _StatusBadge extends StatelessWidget {
         color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(20),
         border: Border.all(color: color.withOpacity(0.35)),
       ),
-      child: Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+      child: Text(label,
+          style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
     );
   }
 }
 
 class _CapChip extends StatelessWidget {
-  final String label;
-  final Color color;
+  final String label; final Color color;
   const _CapChip(this.label, this.color);
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-    decoration: BoxDecoration(
-      color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(6)),
+    decoration: BoxDecoration(color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(6)),
     child: Text(label,
         style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color)),
   );

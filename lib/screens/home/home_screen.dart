@@ -3,43 +3,33 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../theme/app_theme.dart';
-import '../../services/devices_provider.dart';
-import '../../services/discovery_service.dart';
+import '../../services/auth_service.dart';
 import '../../models/device.dart';
 import '../../widgets/nx_card.dart';
 
-class HomeScreen extends ConsumerStatefulWidget {
+class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
-  @override
-  ConsumerState<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends ConsumerState<HomeScreen> {
-  @override
-  void initState() {
-    super.initState();
-    // Kick off LAN discovery when home loads
-    Future.microtask(() => ref.read(discoveryServiceProvider).start());
-  }
 
   @override
-  Widget build(BuildContext context) {
-    final devices = ref.watch(devicesProvider);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user    = ref.watch(authStateProvider).valueOrNull;
+    final devices = ref.watch(devicesStreamProvider).valueOrNull ?? [];
     final online  = devices.where((d) => d.status == DeviceStatus.online).length;
-    final t = Theme.of(context).textTheme;
+    final t  = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       body: CustomScrollView(slivers: [
         SliverAppBar(
-          expandedHeight: 120,
+          expandedHeight: 130,
           pinned: true,
           flexibleSpace: FlexibleSpaceBar(
             titlePadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
             title: Column(mainAxisAlignment: MainAxisAlignment.end,
                 crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('Nexus', style: t.headlineMedium),
-              Text('$online device${online == 1 ? '' : 's'} online',
+              Text('$online device${online == 1 ? '' : 's'} online · '
+                  '${user?.displayName ?? user?.email ?? ''}',
                   style: t.bodySmall?.copyWith(color: AppTheme.accent)),
             ]),
           ),
@@ -54,11 +44,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           padding: const EdgeInsets.all(16),
           sliver: SliverList(delegate: SliverChildListDelegate([
 
-            // ── Device strip ──────────────────────────────────────
+            // Device strip
             SizedBox(
               height: 88,
               child: devices.isEmpty
-                  ? Center(child: Text('Scanning for devices…', style: t.bodySmall))
+                  ? Center(child: Text(
+                      'Sign in on other devices to see them here',
+                      style: t.bodySmall))
                   : ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: devices.length,
@@ -68,7 +60,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 24),
 
-            // ── Features ─────────────────────────────────────────
             Text('Features', style: t.titleLarge),
             const SizedBox(height: 12),
             GridView.builder(
@@ -97,13 +88,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       Text(f.subtitle, style: t.bodySmall, maxLines: 2),
                     ]),
                   ).animate(delay: (i * 55).ms).fadeIn(duration: 280.ms)
-                      .scale(begin: const Offset(.95, .95), end: const Offset(1, 1)),
+                      .scale(begin: const Offset(.95,.95), end: const Offset(1,1)),
                 );
               },
             ),
             const SizedBox(height: 24),
 
-            // ── Quick actions ─────────────────────────────────────
             Text('Quick actions', style: t.titleLarge),
             const SizedBox(height: 12),
             ..._quickActions.map((qa) => Padding(
@@ -117,7 +107,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(width: 14),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(qa.label, style: t.titleMedium),
-                    const SizedBox(height: 2),
                     Text(qa.subtitle, style: t.bodySmall),
                   ])),
                   Icon(Icons.chevron_right_rounded,
@@ -141,7 +130,7 @@ class _DeviceChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isOnline = device.status == DeviceStatus.online;
-    final t = Theme.of(context).textTheme;
+    final t  = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: () => context.go('/devices'),
@@ -151,8 +140,7 @@ class _DeviceChip extends StatelessWidget {
           color: cs.surface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: isOnline
-              ? AppTheme.success.withOpacity(0.4)
-              : cs.outline.withOpacity(0.5)),
+              ? AppTheme.success.withOpacity(0.4) : cs.outline.withOpacity(0.5)),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
